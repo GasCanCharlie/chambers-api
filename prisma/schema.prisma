@@ -1,13 +1,12 @@
 // Chambers Database Schema
 // A secure, anonymous platform for judicial mental health support
-// SQLite-compatible version for development
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
