@@ -1,0 +1,380 @@
+// Chambers Database Schema
+// A secure, anonymous platform for judicial mental health support
+// SQLite-compatible version for development
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// VERIFICATION & AUTHENTICATION
+// ============================================================================
+
+// Separate table for verification data - can be deleted after verification
+model Verification {
+  id              String   @id @default(cuid())
+  method          String   // EMAIL, CREDENTIAL, DATABASE, REFERRAL, MANUAL
+  status          String   @default("PENDING") // PENDING, IN_REVIEW, VERIFIED, REJECTED, EXPIRED
+
+  // Temporary data used only during verification process
+  emailHash       String?  @unique // Hashed email for lookup
+  documentUrl     String?  // Temporary S3 URL, deleted after review
+  referralCode    String?  // If referred by another member
+
+  // Verification metadata
+  submittedAt     DateTime @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?  // Admin ID who reviewed
+  rejectionReason String?
+
+  // Link to user (created after successful verification)
+  userId          String?  @unique
+  user            User?    @relation(fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([emailHash])
+}
+
+// ============================================================================
+// USER & PROFILE
+// ============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+
+  // Anonymous identity
+  pseudonym     String    @unique
+
+  // Optional profile info (user-controlled visibility)
+  yearsOnBench  String?   // Range like "5-10", "10-15"
+  courtType     String?   // FEDERAL, STATE, TRIBAL, ADMINISTRATIVE, MUNICIPAL
+  isGuide       Boolean   @default(false) // Senior/mentor judge
+
+  // Security
+  pinHash       String    // Argon2 hashed PIN
+  biometricKey  String?   // Public key for biometric auth
+
+  // Account status
+  isActive      Boolean   @default(true)
+  lastActiveAt  DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relationships
+  verification   Verification?
+  preferences    UserPreferences?
+  sessions       Session[]
+  journalEntries JournalEntry[]
+  moodCheckins   MoodCheckin[]
+  posts          Post[]
+  comments       Comment[]
+  connections    Connection[]      @relation("UserConnections")
+  connectedTo    Connection[]      @relation("ConnectedToUser")
+  messages       Message[]         @relation("SentMessages")
+  receivedMsgs   Message[]         @relation("ReceivedMessages")
+
+  @@index([pseudonym])
+  @@index([lastActiveAt])
+}
+
+model UserPreferences {
+  id                    String  @id @default(cuid())
+  userId                String  @unique
+  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Notification preferences
+  dailyCheckIn          Boolean @default(true)
+  dailyCheckInTime      String  @default("08:00") // HH:MM format
+  directMessages        Boolean @default(true)
+  discussionReplies     Boolean @default(false)
+
+  // Privacy preferences
+  showYearsOnBench      Boolean @default(false)
+  showCourtType         Boolean @default(false)
+  allowDirectMessages   Boolean @default(false)
+  allowConnectionReqs   Boolean @default(true)
+
+  // App preferences
+  theme                 String  @default("light")
+  reducedMotion         Boolean @default(false)
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Session data
+  deviceId     String
+  deviceName   String?
+  refreshToken String   @unique
+
+  // Security
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([refreshToken])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// CONNECTIONS & MESSAGING
+// ============================================================================
+
+model Connection {
+  id          String   @id @default(cuid())
+
+  userId      String
+  user        User     @relation("UserConnections", fields: [userId], references: [id], onDelete: Cascade)
+
+  connectedId String
+  connected   User     @relation("ConnectedToUser", fields: [connectedId], references: [id], onDelete: Cascade)
+
+  status      String   @default("PENDING") // PENDING, ACCEPTED, BLOCKED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, connectedId])
+  @@index([userId, status])
+  @@index([connectedId, status])
+}
+
+model Message {
+  id               String    @id @default(cuid())
+
+  senderId         String
+  sender           User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  recipientId      String
+  recipient        User      @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  // E2E encrypted content - server cannot read
+  encryptedContent String
+
+  // Metadata
+  status           String    @default("SENT") // SENT, DELIVERED, READ, DELETED
+  createdAt        DateTime  @default(now())
+  deliveredAt      DateTime?
+  readAt           DateTime?
+
+  // Auto-delete settings
+  expiresAt        DateTime?
+
+  @@index([senderId, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// DISCUSSION SPACES
+// ============================================================================
+
+model Space {
+  id          String   @id @default(cuid())
+
+  name        String   @unique
+  description String
+  color       String   // Hex color for UI
+  icon        String?  // Icon identifier
+
+  // Moderation
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  posts       Post[]
+
+  @@index([isActive])
+}
+
+model Post {
+  id            String    @id @default(cuid())
+
+  spaceId       String
+  space         Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  content       String    // Markdown content
+
+  // Moderation
+  isVisible     Boolean   @default(true)
+  reportCount   Int       @default(0)
+  moderatedAt   DateTime?
+  moderatedBy   String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relationships
+  comments      Comment[]
+
+  @@index([spaceId, createdAt])
+  @@index([authorId])
+  @@index([isVisible])
+}
+
+model Comment {
+  id          String    @id @default(cuid())
+
+  postId      String
+  post        Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // For nested comments
+  parentId    String?
+  parent      Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Comment[] @relation("CommentReplies")
+
+  content     String
+
+  // Moderation
+  isVisible   Boolean   @default(true)
+  reportCount Int       @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId])
+}
+
+// ============================================================================
+// WELLBEING & JOURNALING
+// ============================================================================
+
+model MoodCheckin {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mood      Int      // 1-4 scale
+  note      String?  // Optional encrypted note
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model JournalEntry {
+  id               String    @id @default(cuid())
+
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Encrypted with user's personal key - server cannot read
+  encryptedContent String
+  encryptedTitle   String?
+
+  // Metadata (not encrypted)
+  mood             Int?      // Optional mood indicator
+  promptId         String?   // If written from a prompt
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Auto-delete
+  expiresAt        DateTime?
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// ============================================================================
+// TOOLS & EXERCISES
+// ============================================================================
+
+model Exercise {
+  id          String   @id @default(cuid())
+
+  slug        String   @unique
+  title       String
+  description String
+  category    String   // QUICK_TOOL, REFRAMING, REFLECTION, BREATHING, GROUNDING
+  duration    Int      // Minutes
+
+  // Content as JSON string (parsed in application)
+  content     String   // JSON string: Steps, prompts, etc.
+
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  completions ExerciseCompletion[]
+
+  @@index([category, isActive])
+}
+
+model ExerciseCompletion {
+  id                  String   @id @default(cuid())
+
+  userId              String
+  exerciseId          String
+  exercise            Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  // Optional encrypted reflection from the exercise
+  encryptedReflection String?
+
+  completedAt         DateTime @default(now())
+
+  @@index([userId, completedAt])
+  @@index([exerciseId])
+}
+
+// ============================================================================
+// AUDIT & MODERATION
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+
+  action     String   // e.g., "user.login", "post.create", "message.send"
+  userId     String?  // Can be null for system actions
+  targetId   String?  // ID of affected resource
+  targetType String?  // Type of affected resource
+
+  // No PII - only action metadata (stored as JSON string)
+  metadata   String?
+
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Report {
+  id          String    @id @default(cuid())
+
+  reporterId  String    // User who reported
+  targetId    String    // ID of reported content
+  targetType  String    // POST, COMMENT, MESSAGE, USER
+
+  reason      String
+  details     String?
+
+  status      String    @default("PENDING") // PENDING, REVIEWED, ACTIONED, DISMISSED
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  resolution  String?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([status])
+  @@index([targetType, targetId])
+}
