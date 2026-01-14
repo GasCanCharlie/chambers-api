@@ -65,41 +65,50 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
     // Hash email if provided (we never store plain emails)
     let emailHash: string | undefined;
+    let verification;
+
     if (body.email) {
       emailHash = crypto
         .createHash('sha256')
         .update(body.email.toLowerCase())
         .digest('hex');
 
-      // Check if already verified with this email
+      // Check if already exists with this email
       const existing = await prisma.verification.findUnique({
         where: { emailHash },
       });
 
-      if (existing?.status === 'VERIFIED') {
-        return reply.status(400).send({
-          statusCode: 400,
-          error: 'Already Verified',
-          message: 'This email has already been used for verification',
-        });
+      if (existing) {
+        // If already verified and used for registration, reject
+        if (existing.status === 'VERIFIED' && existing.userId) {
+          return reply.status(400).send({
+            statusCode: 400,
+            error: 'Already Registered',
+            message: 'This email has already been used to create an account. Please sign in.',
+          });
+        }
+        // Otherwise, reuse the existing verification
+        verification = existing;
       }
     }
 
-    // Create verification record
-    const verification = await prisma.verification.create({
-      data: {
-        method: body.method,
-        emailHash,
-        referralCode: body.referralCode,
-      },
-    });
+    // Create new verification record if none exists
+    if (!verification) {
+      verification = await prisma.verification.create({
+        data: {
+          method: body.method,
+          emailHash,
+          referralCode: body.referralCode,
+        },
+      });
+    }
 
     // Auto-verify in development or for admin emails
     const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
     const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
 
     if ((env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL') {
-      await prisma.verification.update({
+      verification = await prisma.verification.update({
         where: { id: verification.id },
         data: { status: 'VERIFIED' },
       });
