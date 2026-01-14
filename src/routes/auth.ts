@@ -63,6 +63,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/verify/start', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = startVerificationSchema.parse(request.body);
 
+    // Check for admin emails first
+    const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
+    const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
+    const shouldAutoVerify = (env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL';
+
     // Hash email if provided (we never store plain emails)
     let emailHash: string | undefined;
     let verification;
@@ -87,8 +92,16 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
             message: 'This email has already been used to create an account. Please sign in.',
           });
         }
-        // Otherwise, reuse the existing verification
-        verification = existing;
+
+        // For admin emails, always update to VERIFIED
+        if (shouldAutoVerify) {
+          verification = await prisma.verification.update({
+            where: { id: existing.id },
+            data: { status: 'VERIFIED' },
+          });
+        } else {
+          verification = existing;
+        }
       }
     }
 
@@ -99,29 +112,8 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
           method: body.method,
           emailHash,
           referralCode: body.referralCode,
+          status: shouldAutoVerify ? 'VERIFIED' : 'PENDING',
         },
-      });
-    }
-
-    // Auto-verify in development or for admin emails
-    const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
-    const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
-
-    // Debug logging
-    console.log('DEBUG verify/start:', {
-      email: body.email,
-      emailLower: body.email?.toLowerCase(),
-      adminEmails,
-      isAdminEmail,
-      nodeEnv: env.NODE_ENV,
-      verificationId: verification.id,
-      currentStatus: verification.status,
-    });
-
-    if ((env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL') {
-      verification = await prisma.verification.update({
-        where: { id: verification.id },
-        data: { status: 'VERIFIED' },
       });
     }
 
