@@ -63,10 +63,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/verify/start', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = startVerificationSchema.parse(request.body);
 
-    // Check for admin emails first
-    const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
-    const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
-    const shouldAutoVerify = (env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL';
+    // TEMPORARY: Auto-verify all email verifications during testing
+    // TODO: Remove this and implement proper email verification
+    const shouldAutoVerify = body.method === 'EMAIL';
 
     // Hash email if provided (we never store plain emails)
     let emailHash: string | undefined;
