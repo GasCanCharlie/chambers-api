@@ -433,6 +433,43 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
 
     return { message: 'All sessions terminated' };
   });
+
+  /**
+   * TEMPORARY: Admin endpoint to reset a user for testing
+   * DELETE /api/auth/admin/reset-user/:pseudonym
+   */
+  app.delete('/admin/reset-user/:pseudonym', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { pseudonym } = request.params as { pseudonym: string };
+
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { pseudonym },
+    });
+
+    if (!user) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'User not found',
+      });
+    }
+
+    // Delete related records first
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+    await prisma.auditLog.deleteMany({ where: { userId: user.id } });
+    await prisma.userPreferences.deleteMany({ where: { userId: user.id } });
+
+    // Clear verification link
+    await prisma.verification.updateMany({
+      where: { userId: user.id },
+      data: { userId: null },
+    });
+
+    // Delete the user
+    await prisma.user.delete({ where: { id: user.id } });
+
+    return { message: `User ${pseudonym} has been reset` };
+  });
 }
 
 // ============================================================================
