@@ -107,6 +107,17 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
     const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
 
+    // Debug logging
+    console.log('DEBUG verify/start:', {
+      email: body.email,
+      emailLower: body.email?.toLowerCase(),
+      adminEmails,
+      isAdminEmail,
+      nodeEnv: env.NODE_ENV,
+      verificationId: verification.id,
+      currentStatus: verification.status,
+    });
+
     if ((env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL') {
       verification = await prisma.verification.update({
         where: { id: verification.id },
