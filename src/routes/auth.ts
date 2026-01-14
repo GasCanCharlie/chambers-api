@@ -94,9 +94,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
-    // In production, send verification email here
-    // For now, we'll auto-verify in development
-    if (env.NODE_ENV === 'development' && body.method === 'EMAIL') {
+    // Auto-verify in development or for admin emails
+    const adminEmails = env.ADMIN_EMAILS?.split(',').map(e => e.trim().toLowerCase()) || [];
+    const isAdminEmail = body.email && adminEmails.includes(body.email.toLowerCase());
+
+    if ((env.NODE_ENV === 'development' || isAdminEmail) && body.method === 'EMAIL') {
       await prisma.verification.update({
         where: { id: verification.id },
         data: { status: 'VERIFIED' },
