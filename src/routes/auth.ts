@@ -435,6 +435,156 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
+   * TEMPORARY: Admin endpoint to seed the database
+   * POST /api/auth/admin/seed
+   */
+  app.post('/admin/seed', async (request: FastifyRequest, reply: FastifyReply) => {
+    // Create discussion spaces
+    const spaces = [
+      { name: 'The Weight Room', description: 'Processing heavy cases and decisions', color: '#1E3A5F', icon: 'weight' },
+      { name: 'Overwhelm & Workload', description: 'Caseload, time pressure, administrative burden', color: '#D4A574', icon: 'clock' },
+      { name: 'Ethical Crossroads', description: 'Navigating gray areas and conscience', color: '#4A6741', icon: 'scale' },
+      { name: 'Life Beyond the Bench', description: 'Family, identity, retirement transitions', color: '#7BA3A8', icon: 'home' },
+      { name: 'New to the Robe', description: 'First 5 years on the bench', color: '#E8A87C', icon: 'star' },
+      { name: 'Federal Perspectives', description: 'Federal judiciary-specific discussions', color: '#2A4A73', icon: 'building' },
+      { name: 'State & Local Realities', description: 'State, county, and municipal court issues', color: '#5C7D52', icon: 'map' },
+      { name: 'Mentorship Circle', description: 'Guidance from senior and retired judges', color: '#8B7E74', icon: 'users' },
+    ];
+
+    for (const space of spaces) {
+      await prisma.space.upsert({
+        where: { name: space.name },
+        update: space,
+        create: space,
+      });
+    }
+
+    // Create exercises
+    const exercises = [
+      {
+        slug: 'breathing-reset',
+        title: 'Breathing Reset',
+        description: '4-7-8 breathing technique for immediate calm',
+        category: 'QUICK_TOOL',
+        duration: 2,
+        content: JSON.stringify({
+          type: 'breathing',
+          steps: [
+            { instruction: 'Find a comfortable position', duration: 5 },
+            { instruction: 'Breathe in through your nose', duration: 4, action: 'inhale' },
+            { instruction: 'Hold your breath', duration: 7, action: 'hold' },
+            { instruction: 'Exhale slowly through your mouth', duration: 8, action: 'exhale' },
+          ],
+          cycles: 4,
+        }),
+        sortOrder: 1,
+      },
+      {
+        slug: 'grounding-exercise',
+        title: 'Grounding Exercise',
+        description: '5-4-3-2-1 sensory awareness technique',
+        category: 'GROUNDING',
+        duration: 3,
+        content: JSON.stringify({
+          type: 'grounding',
+          steps: [
+            { instruction: 'Name 5 things you can see', count: 5, sense: 'sight' },
+            { instruction: 'Name 4 things you can touch', count: 4, sense: 'touch' },
+            { instruction: 'Name 3 things you can hear', count: 3, sense: 'sound' },
+            { instruction: 'Name 2 things you can smell', count: 2, sense: 'smell' },
+            { instruction: 'Name 1 thing you can taste', count: 1, sense: 'taste' },
+          ],
+        }),
+        sortOrder: 2,
+      },
+      {
+        slug: 'perspective-shift',
+        title: 'Perspective Shift',
+        description: '"In 5 years, how will this matter?" reflection',
+        category: 'QUICK_TOOL',
+        duration: 5,
+        content: JSON.stringify({
+          type: 'reflection',
+          prompts: [
+            'What situation is weighing on you right now?',
+            'In 5 years, how significant will this feel?',
+            'What would you tell a colleague facing this?',
+            'What is one thing you can control about this?',
+          ],
+        }),
+        sortOrder: 3,
+      },
+      {
+        slug: 'compassion-pause',
+        title: 'Self-Compassion Pause',
+        description: 'A brief practice in self-kindness',
+        category: 'QUICK_TOOL',
+        duration: 3,
+        content: JSON.stringify({
+          type: 'guided',
+          steps: [
+            { instruction: 'Place your hand on your heart', duration: 5 },
+            { instruction: 'Acknowledge: "This is a moment of difficulty"', duration: 10 },
+            { instruction: 'Remind yourself: "Difficulty is part of being human"', duration: 10 },
+            { instruction: 'Offer yourself kindness: "May I be patient with myself"', duration: 10 },
+            { instruction: 'Take three deep breaths', duration: 15 },
+          ],
+        }),
+        sortOrder: 4,
+      },
+      {
+        slug: 'weight-of-decision',
+        title: 'The Weight of Decision',
+        description: 'Reframe thoughts about difficult rulings',
+        category: 'REFRAMING',
+        duration: 10,
+        content: JSON.stringify({
+          type: 'cbt_reframe',
+          introduction: 'Judges carry the weight of decisions that affect lives.',
+          steps: [
+            { title: 'Identify the Thought', prompt: 'What automatic thought keeps returning?' },
+            { title: 'Examine the Evidence', prompt: 'What supports or contradicts this thought?' },
+            { title: 'Alternative Perspective', prompt: 'What would you think of a colleague who made the same decision?' },
+            { title: 'Balanced Response', prompt: 'Write a more balanced thought.' },
+          ],
+        }),
+        sortOrder: 5,
+      },
+      {
+        slug: 'burnout-check',
+        title: 'Burnout Check-In',
+        description: 'Assess signs of judicial exhaustion',
+        category: 'REFLECTION',
+        duration: 15,
+        content: JSON.stringify({
+          type: 'assessment',
+          introduction: 'Burnout in the judiciary often goes unrecognized.',
+          sections: [
+            { title: 'Physical Signs', questions: ['How is your sleep?', 'Unexplained fatigue?', 'Eating habit changes?'] },
+            { title: 'Emotional Signs', questions: ['Feeling cynical?', 'Harder to feel empathy?', 'Dread going to work?'] },
+            { title: 'Behavioral Signs', questions: ['Withdrawing from others?', 'Stopped activities you enjoyed?', 'More errors than usual?'] },
+          ],
+        }),
+        sortOrder: 6,
+      },
+    ];
+
+    for (const exercise of exercises) {
+      await prisma.exercise.upsert({
+        where: { slug: exercise.slug },
+        update: exercise,
+        create: exercise,
+      });
+    }
+
+    return {
+      message: 'Database seeded successfully',
+      spaces: spaces.length,
+      exercises: exercises.length,
+    };
+  });
+
+  /**
    * TEMPORARY: Admin endpoint to reset a user for testing
    * DELETE /api/auth/admin/reset-user/:pseudonym
    */
