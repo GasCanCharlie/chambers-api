@@ -171,10 +171,23 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     if (verification.userId) {
-      return reply.status(400).send({
-        statusCode: 400,
-        error: 'Already Registered',
-        message: 'This verification has already been used',
+      // Check if the user actually exists (registration may have failed midway)
+      const existingUserForVerification = await prisma.user.findUnique({
+        where: { id: verification.userId },
+      });
+
+      if (existingUserForVerification) {
+        return reply.status(400).send({
+          statusCode: 400,
+          error: 'Already Registered',
+          message: 'This verification has already been used. Please sign in.',
+        });
+      }
+
+      // User doesn't exist, clear the userId to allow retry
+      await prisma.verification.update({
+        where: { id: verification.id },
+        data: { userId: null },
       });
     }
 
