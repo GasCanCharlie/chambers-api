@@ -43,7 +43,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // CORS configuration
   await app.register(cors, {
-    origin: isDev ? true : ['https://chambers-app.com'],
+    origin: true, // Allow all origins for now (mobile app + web testing)
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
