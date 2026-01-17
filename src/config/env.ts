@@ -31,6 +31,9 @@ const envSchema = z.object({
 
   // Admin/Dev bypass (comma-separated emails that auto-verify)
   ADMIN_EMAILS: z.string().optional(),
+
+  // AI API (Anthropic Claude)
+  ANTHROPIC_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

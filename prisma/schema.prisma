@@ -377,3 +377,35 @@ model Report {
   @@index([status])
   @@index([targetType, targetId])
 }
+
+// ============================================================================
+// AI REFLECTION ASSISTANT
+// ============================================================================
+
+model ReflectionConversation {
+  id        String   @id @default(cuid())
+
+  userId    String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  messages  ReflectionMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ReflectionMessage {
+  id             String   @id @default(cuid())
+
+  conversationId String
+  conversation   ReflectionConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role           String   // 'user' or 'assistant'
+  content        String
+
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
