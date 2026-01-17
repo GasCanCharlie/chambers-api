@@ -115,10 +115,14 @@ async function callAnthropicAPI(
   messages: ConversationMessage[],
   systemPrompt: string
 ): Promise<string> {
+  console.log('callAnthropicAPI called, API key exists:', !!env.ANTHROPIC_API_KEY);
+
   if (!env.ANTHROPIC_API_KEY) {
     console.error('ANTHROPIC_API_KEY is not set');
     throw new Error('AI service not configured');
   }
+
+  console.log('Making request to Anthropic API...');
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -135,13 +139,16 @@ async function callAnthropicAPI(
     }),
   });
 
+  console.log('Anthropic API response status:', response.status);
+
   if (!response.ok) {
     const error = await response.text();
-    console.error('Anthropic API error:', error);
-    throw new Error('AI service temporarily unavailable');
+    console.error('Anthropic API error response:', response.status, error);
+    throw new Error(`AI service error: ${response.status}`);
   }
 
   const data = await response.json();
+  console.log('Anthropic API success, response length:', data.content[0]?.text?.length || 0);
   return data.content[0]?.text || 'I am here with you.';
 }
 
@@ -205,9 +212,10 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
     let assistantResponse: string;
     try {
       assistantResponse = await callAnthropicAPI(conversationHistory, SYSTEM_PROMPT);
-    } catch (error) {
+    } catch (error: any) {
       // Log the error for debugging
-      request.log.error({ error }, 'Reflection AI error');
+      console.error('Reflection AI error:', error?.message || error);
+      request.log.error({ error: error?.message || error }, 'Reflection AI error');
       // Fallback response if AI is unavailable
       assistantResponse = "I'm here with what you've shared. We can continue when you're ready, or leave this here.";
     }
