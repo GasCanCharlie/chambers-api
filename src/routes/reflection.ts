@@ -116,6 +116,7 @@ async function callAnthropicAPI(
   systemPrompt: string
 ): Promise<string> {
   if (!env.ANTHROPIC_API_KEY) {
+    console.error('ANTHROPIC_API_KEY is not set');
     throw new Error('AI service not configured');
   }
 
@@ -205,6 +206,8 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
     try {
       assistantResponse = await callAnthropicAPI(conversationHistory, SYSTEM_PROMPT);
     } catch (error) {
+      // Log the error for debugging
+      request.log.error({ error }, 'Reflection AI error');
       // Fallback response if AI is unavailable
       assistantResponse = "I'm here with what you've shared. We can continue when you're ready, or leave this here.";
     }
