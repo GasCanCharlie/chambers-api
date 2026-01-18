@@ -37,6 +37,9 @@ const envSchema = z.object({
 
   // ElevenLabs TTS
   ELEVENLABS_API_KEY: z.string().optional(),
+
+  // OpenAI TTS
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

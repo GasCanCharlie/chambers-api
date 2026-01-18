@@ -142,34 +142,28 @@ setInterval(() => {
   }
 }, 60000);
 
-async function callElevenLabsTTS(text: string): Promise<Buffer> {
-  if (!env.ELEVENLABS_API_KEY) {
-    throw new Error('ElevenLabs API key not configured');
+async function callOpenAITTS(text: string): Promise<Buffer> {
+  if (!env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key not configured');
   }
 
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
-    {
-      method: 'POST',
-      headers: {
-        'Accept': 'audio/mpeg',
-        'Content-Type': 'application/json',
-        'xi-api-key': env.ELEVENLABS_API_KEY,
-      },
-      body: JSON.stringify({
-        text: text,
-        model_id: 'eleven_flash_v2_5',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-        },
-      }),
-    }
-  );
+  const response = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'tts-1',
+      input: text,
+      voice: 'nova', // Options: alloy, echo, fable, onyx, nova, shimmer
+      response_format: 'mp3',
+    }),
+  });
 
   if (!response.ok) {
     const error = await response.text();
-    console.error('ElevenLabs API error:', response.status, error);
+    console.error('OpenAI TTS API error:', response.status, error);
     throw new Error(`TTS service error: ${response.status}`);
   }
 
@@ -284,7 +278,7 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
     const body = ttsSchema.parse(request.body);
 
     try {
-      const audioBuffer = await callElevenLabsTTS(body.text);
+      const audioBuffer = await callOpenAITTS(body.text);
 
       // Generate unique ID and store in cache (expires in 5 minutes)
       const audioId = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}`;
