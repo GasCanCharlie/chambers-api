@@ -145,12 +145,10 @@ async function callElevenLabsTTS(text: string): Promise<Buffer> {
       },
       body: JSON.stringify({
         text: text,
-        model_id: 'eleven_monolingual_v1',
+        model_id: 'eleven_flash_v2_5',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true,
         },
       }),
     }
