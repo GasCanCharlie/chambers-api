@@ -90,6 +90,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(import('./routes/journal.js'), { prefix: '/api/journal' });
   await app.register(import('./routes/exercises.js'), { prefix: '/api/exercises' });
   await app.register(import('./routes/reflection.js'), { prefix: '/api/reflection' });
+  await app.register(import('./routes/realtime.js'), { prefix: '/api/realtime' });
 
   // Global error handler
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
