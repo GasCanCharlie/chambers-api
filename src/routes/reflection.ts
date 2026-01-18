@@ -129,6 +129,19 @@ async function callAnthropicAPI(
 // ElevenLabs voice IDs - using "Rachel" which is warm and professional
 const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - warm, calm voice
 
+// In-memory cache for audio files (auto-expires after 5 minutes)
+const audioCache = new Map<string, { buffer: Buffer; expires: number }>();
+
+// Cleanup expired audio files every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, data] of audioCache.entries()) {
+    if (data.expires < now) {
+      audioCache.delete(id);
+    }
+  }
+}, 60000);
+
 async function callElevenLabsTTS(text: string): Promise<Buffer> {
   if (!env.ELEVENLABS_API_KEY) {
     throw new Error('ElevenLabs API key not configured');
@@ -265,18 +278,24 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
   /**
    * Convert text to speech using ElevenLabs
    * POST /api/reflection/tts
-   * Returns base64 encoded audio for easier mobile consumption
+   * Returns a URL to stream the audio
    */
   app.post('/tts', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = ttsSchema.parse(request.body);
 
     try {
       const audioBuffer = await callElevenLabsTTS(body.text);
-      const base64Audio = audioBuffer.toString('base64');
 
+      // Generate unique ID and store in cache (expires in 5 minutes)
+      const audioId = `audio_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      audioCache.set(audioId, {
+        buffer: audioBuffer,
+        expires: Date.now() + 5 * 60 * 1000,
+      });
+
+      // Return URL to stream the audio
       return {
-        audio: base64Audio,
-        contentType: 'audio/mpeg',
+        audioUrl: `/api/reflection/audio/${audioId}`,
       };
     } catch (error: any) {
       console.error('TTS error:', error?.message || error);
@@ -286,6 +305,29 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
         message: 'Failed to generate audio',
       });
     }
+  });
+
+  /**
+   * Stream audio file
+   * GET /api/reflection/audio/:id
+   * No auth required - audio IDs are random and expire quickly
+   */
+  app.get('/audio/:id', { preHandler: [] }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+
+    const cached = audioCache.get(id);
+    if (!cached) {
+      return reply.status(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Audio not found or expired',
+      });
+    }
+
+    reply.header('Content-Type', 'audio/mpeg');
+    reply.header('Content-Length', cached.buffer.length);
+    reply.header('Cache-Control', 'no-cache');
+    return reply.send(cached.buffer);
   });
 
   /**
