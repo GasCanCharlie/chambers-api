@@ -68,6 +68,10 @@ const chatMessageSchema = z.object({
   conversationId: z.string().optional(),
 });
 
+const ttsSchema = z.object({
+  text: z.string().min(1).max(5000),
+});
+
 // ============================================================================
 // Helper: Call Anthropic API
 // ============================================================================
@@ -116,6 +120,50 @@ async function callAnthropicAPI(
   const data = await response.json();
   console.log('Anthropic API success, response length:', data.content[0]?.text?.length || 0);
   return data.content[0]?.text || 'I am here with you.';
+}
+
+// ============================================================================
+// Helper: Call ElevenLabs TTS API
+// ============================================================================
+
+// ElevenLabs voice IDs - using "Rachel" which is warm and professional
+const ELEVENLABS_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel - warm, calm voice
+
+async function callElevenLabsTTS(text: string): Promise<Buffer> {
+  if (!env.ELEVENLABS_API_KEY) {
+    throw new Error('ElevenLabs API key not configured');
+  }
+
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+    {
+      method: 'POST',
+      headers: {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': env.ELEVENLABS_API_KEY,
+      },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_monolingual_v1',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error('ElevenLabs API error:', response.status, error);
+    throw new Error(`TTS service error: ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 // ============================================================================
@@ -214,6 +262,29 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
         createdAt: savedResponse.createdAt,
       },
     };
+  });
+
+  /**
+   * Convert text to speech using ElevenLabs
+   * POST /api/reflection/tts
+   */
+  app.post('/tts', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = ttsSchema.parse(request.body);
+
+    try {
+      const audioBuffer = await callElevenLabsTTS(body.text);
+
+      reply.header('Content-Type', 'audio/mpeg');
+      reply.header('Content-Length', audioBuffer.length);
+      return reply.send(audioBuffer);
+    } catch (error: any) {
+      console.error('TTS error:', error?.message || error);
+      return reply.status(500).send({
+        statusCode: 500,
+        error: 'Internal Server Error',
+        message: 'Failed to generate audio',
+      });
+    }
   });
 
   /**

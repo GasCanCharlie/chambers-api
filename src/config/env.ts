@@ -34,6 +34,9 @@ const envSchema = z.object({
 
   // AI API (Anthropic Claude)
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  // ElevenLabs TTS
+  ELEVENLABS_API_KEY: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
