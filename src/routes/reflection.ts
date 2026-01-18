@@ -265,16 +265,19 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
   /**
    * Convert text to speech using ElevenLabs
    * POST /api/reflection/tts
+   * Returns base64 encoded audio for easier mobile consumption
    */
   app.post('/tts', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = ttsSchema.parse(request.body);
 
     try {
       const audioBuffer = await callElevenLabsTTS(body.text);
+      const base64Audio = audioBuffer.toString('base64');
 
-      reply.header('Content-Type', 'audio/mpeg');
-      reply.header('Content-Length', audioBuffer.length);
-      return reply.send(audioBuffer);
+      return {
+        audio: base64Audio,
+        contentType: 'audio/mpeg',
+      };
     } catch (error: any) {
       console.error('TTS error:', error?.message || error);
       return reply.status(500).send({
