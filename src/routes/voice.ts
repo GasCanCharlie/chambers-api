@@ -175,6 +175,13 @@ export default async function voiceRoutes(app: FastifyInstance): Promise<void> {
               return;
             }
 
+            // Check if OpenAI API key is configured
+            if (!env.OPENAI_API_KEY) {
+              log('error', 'OPENAI_API_KEY not configured');
+              sendToClient({ type: 'error', message: 'Voice chat not configured - missing API key', code: 'CONFIG_ERROR' });
+              return;
+            }
+
             if (openaiClient) {
               log('info', 'Closing existing OpenAI session');
               openaiClient.close();
@@ -182,6 +189,7 @@ export default async function voiceRoutes(app: FastifyInstance): Promise<void> {
 
             // Create OpenAI Realtime client
             const voice = message.config?.voice || 'sage';
+            log('info', 'Creating OpenAI Realtime client', { voice });
             openaiClient = new OpenAIRealtimeClient({
               apiKey: env.OPENAI_API_KEY!,
               model: 'gpt-4o-realtime-preview-2024-12-17',
@@ -216,17 +224,20 @@ export default async function voiceRoutes(app: FastifyInstance): Promise<void> {
             });
 
             try {
+              log('info', 'Connecting to OpenAI Realtime API...');
               await openaiClient.connect();
-              log('info', 'OpenAI session started');
+              log('info', 'OpenAI session started successfully');
               sendToClient({ type: 'session.ready', sessionId: connectionId });
+              sendToClient({ type: 'status', state: 'listening' });
 
               // Start session timeout
               sessionTimeout = setTimeout(() => {
                 closeConnection('Session timeout');
               }, SESSION_TIMEOUT_MS);
             } catch (error: any) {
-              log('error', 'Failed to connect to OpenAI', { error: error.message });
-              sendToClient({ type: 'error', message: 'Failed to start voice session', code: 'CONNECTION_FAILED' });
+              log('error', 'Failed to connect to OpenAI Realtime', { error: error.message, stack: error.stack });
+              sendToClient({ type: 'error', message: `Voice session failed: ${error.message}`, code: 'OPENAI_CONNECTION_FAILED' });
+              openaiClient = null;
             }
             break;
           }
