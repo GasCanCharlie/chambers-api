@@ -53,13 +53,28 @@ interface VoiceChatRequest {
 }
 
 export default async function voiceChatRoutes(app: FastifyInstance): Promise<void> {
-  // Check if OpenAI API key is configured
+  // Log API key status
   if (!env.OPENAI_API_KEY) {
     app.log.warn('OPENAI_API_KEY not configured - voice chat will not work');
-    return;
   }
 
-  const openai = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  // Create OpenAI client if key is available
+  const openai = env.OPENAI_API_KEY ? new OpenAI({ apiKey: env.OPENAI_API_KEY }) : null;
+
+  /**
+   * GET /api/voice-chat/status
+   * Check if voice chat is available
+   */
+  app.get('/voice-chat/status', async (request, reply) => {
+    return reply.send({
+      available: !!env.OPENAI_API_KEY,
+      features: {
+        stt: true,
+        chat: true,
+        tts: true,
+      },
+    });
+  });
 
   /**
    * POST /api/voice-chat
@@ -87,6 +102,14 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
       },
     },
   }, async (request: FastifyRequest<{ Body: VoiceChatRequest }>, reply: FastifyReply) => {
+    // Check if OpenAI is configured
+    if (!openai) {
+      return reply.status(503).send({
+        error: 'Voice chat is not configured',
+        code: 'NOT_CONFIGURED',
+      });
+    }
+
     const { audio, conversationHistory = [] } = request.body;
 
     try {
@@ -174,20 +197,5 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
         code: 'VOICE_CHAT_ERROR',
       });
     }
-  });
-
-  /**
-   * GET /api/voice-chat/status
-   * Check if voice chat is available
-   */
-  app.get('/voice-chat/status', async (request, reply) => {
-    return reply.send({
-      available: !!env.OPENAI_API_KEY,
-      features: {
-        stt: true,
-        chat: true,
-        tts: true,
-      },
-    });
   });
 }
