@@ -302,7 +302,7 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
   });
 
   /**
-   * Stream audio file
+   * Stream audio file with Range support (required for Android)
    * GET /api/reflection/audio/:id
    * No auth required - audio IDs are random and expire quickly
    */
@@ -318,10 +318,48 @@ export default async function reflectionRoutes(app: FastifyInstance): Promise<vo
       });
     }
 
+    const buffer = cached.buffer;
+    const totalSize = buffer.length;
+
+    // CORS headers
+    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    reply.header('Access-Control-Allow-Headers', 'Range');
+
+    // Always indicate we support ranges
+    reply.header('Accept-Ranges', 'bytes');
     reply.header('Content-Type', 'audio/mpeg');
-    reply.header('Content-Length', cached.buffer.length);
     reply.header('Cache-Control', 'no-cache');
-    return reply.send(cached.buffer);
+
+    // Check for Range header (Android requires this)
+    const rangeHeader = request.headers.range;
+
+    if (rangeHeader) {
+      // Parse range header: "bytes=start-end"
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+      if (match) {
+        const start = match[1] ? parseInt(match[1], 10) : 0;
+        const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+
+        // Validate range
+        if (start >= totalSize || end >= totalSize || start > end) {
+          reply.status(416).header('Content-Range', `bytes */${totalSize}`);
+          return reply.send('Range Not Satisfiable');
+        }
+
+        const chunkSize = end - start + 1;
+        const chunk = buffer.slice(start, end + 1);
+
+        reply.status(206);
+        reply.header('Content-Length', chunkSize);
+        reply.header('Content-Range', `bytes ${start}-${end}/${totalSize}`);
+        return reply.send(chunk);
+      }
+    }
+
+    // No range requested - send full file
+    reply.header('Content-Length', totalSize);
+    return reply.send(buffer);
   });
 
   /**
