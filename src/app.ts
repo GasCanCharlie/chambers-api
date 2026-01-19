@@ -96,6 +96,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(import('./routes/reflection.js'), { prefix: '/api/reflection' });
   await app.register(import('./routes/realtime.js'), { prefix: '/api/realtime' });
   await app.register(import('./routes/voice.js'), { prefix: '/api' });
+  await app.register(import('./routes/voiceChat.js'), { prefix: '/api' });
 
   // Global error handler
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
