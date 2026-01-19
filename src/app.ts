@@ -10,6 +10,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import jwt from '@fastify/jwt';
 import cookie from '@fastify/cookie';
+import websocket from '@fastify/websocket';
 import { env, isDev } from './config/env.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -73,6 +74,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     hook: 'onRequest',
   });
 
+  // WebSocket support (for voice chat)
+  await app.register(websocket);
+
   // Custom decorators
   app.decorateRequest('userId', null);
 
@@ -91,6 +95,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(import('./routes/exercises.js'), { prefix: '/api/exercises' });
   await app.register(import('./routes/reflection.js'), { prefix: '/api/reflection' });
   await app.register(import('./routes/realtime.js'), { prefix: '/api/realtime' });
+  await app.register(import('./routes/voice.js'), { prefix: '/api' });
 
   // Global error handler
   app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
