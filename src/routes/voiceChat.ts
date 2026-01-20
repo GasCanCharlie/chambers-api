@@ -10,6 +10,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { env } from '../config/env.js';
+import { authenticate } from '../middleware/auth.js';
 import OpenAI from 'openai';
 
 // System prompt for voice conversations
@@ -81,7 +82,7 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
    * Process voice input and return voice response
    */
   app.post('/voice-chat', {
-    preHandler: [app.authenticate],
+    preHandler: [authenticate],
     schema: {
       body: {
         type: 'object',
