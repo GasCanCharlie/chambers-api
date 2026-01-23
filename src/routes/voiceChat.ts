@@ -51,6 +51,7 @@ interface ConversationMessage {
 interface VoiceChatRequest {
   audio: string; // base64 encoded audio
   conversationHistory?: ConversationMessage[];
+  voice?: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer';
 }
 
 export default async function voiceChatRoutes(app: FastifyInstance): Promise<void> {
@@ -99,6 +100,10 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
               },
             },
           },
+          voice: {
+            type: 'string',
+            enum: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']
+          },
         },
       },
     },
@@ -111,7 +116,7 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
       });
     }
 
-    const { audio, conversationHistory = [] } = request.body;
+    const { audio, conversationHistory = [], voice = 'nova' } = request.body;
 
     try {
       // 1. Convert base64 audio to buffer
@@ -160,10 +165,10 @@ export default async function voiceChatRoutes(app: FastifyInstance): Promise<voi
       request.log.info({ assistantText: assistantText.substring(0, 100) }, 'Chat response complete');
 
       // 4. Convert response to speech with TTS
-      request.log.info('Converting to speech with TTS...');
+      request.log.info({ voice }, 'Converting to speech with TTS...');
       const speechResponse = await openai.audio.speech.create({
         model: 'tts-1',
-        voice: 'nova', // Warm, friendly voice
+        voice: voice, // User-selected voice
         input: assistantText,
         response_format: 'mp3',
       });
