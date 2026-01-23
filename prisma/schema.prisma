@@ -11,6 +11,112 @@ datasource db {
 }
 
 // ============================================================================
+// ENUMS - Judge Segmentation
+// ============================================================================
+
+enum USState {
+  AL
+  AK
+  AZ
+  AR
+  CA
+  CO
+  CT
+  DE
+  FL
+  GA
+  HI
+  ID
+  IL
+  IN
+  IA
+  KS
+  KY
+  LA
+  ME
+  MD
+  MA
+  MI
+  MN
+  MS
+  MO
+  MT
+  NE
+  NV
+  NH
+  NJ
+  NM
+  NY
+  NC
+  ND
+  OH
+  OK
+  OR
+  PA
+  RI
+  SC
+  SD
+  TN
+  TX
+  UT
+  VT
+  VA
+  WA
+  WV
+  WI
+  WY
+}
+
+enum FederalCircuit {
+  FIRST
+  SECOND
+  THIRD
+  FOURTH
+  FIFTH
+  SIXTH
+  SEVENTH
+  EIGHTH
+  NINTH
+  TENTH
+  ELEVENTH
+  DC
+  FEDERAL
+}
+
+enum CourtLevel {
+  TRIAL
+  APPELLATE
+  SUPREME
+  SPECIALIZED
+}
+
+enum JudgeType {
+  ELECTED
+  APPOINTED
+  MAGISTRATE
+  COMMISSIONER
+}
+
+enum CaseSpecialization {
+  TRAFFIC
+  MISDEMEANORS
+  FELONIES
+  SMALL_CLAIMS
+  REGULAR_CLAIMS
+  LARGE_CLAIMS
+  ENVIRONMENTAL
+  PROBATE
+  FAMILY
+  JUVENILE
+  CIVIL
+  CRIMINAL
+  BANKRUPTCY
+  TAX
+  PATENT
+  IMMIGRATION
+}
+
+// ============================================================================
 // VERIFICATION & AUTHENTICATION
 // ============================================================================
 
@@ -54,6 +160,12 @@ model User {
   courtType     String?   // FEDERAL, STATE, TRIBAL, ADMINISTRATIVE, MUNICIPAL
   isGuide       Boolean   @default(false) // Senior/mentor judge
 
+  // NEW: Detailed segmentation (some required during registration)
+  stateJurisdiction     USState?
+  federalCircuit        FederalCircuit?
+  courtLevel           CourtLevel?
+  judgeType            JudgeType?
+
   // Security
   pinHash       String    // Argon2 hashed PIN
   biometricKey  String?   // Public key for biometric auth
@@ -65,20 +177,26 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relationships
-  verification   Verification?
-  preferences    UserPreferences?
-  sessions       Session[]
-  journalEntries JournalEntry[]
-  moodCheckins   MoodCheckin[]
-  posts          Post[]
-  comments       Comment[]
-  connections    Connection[]      @relation("UserConnections")
-  connectedTo    Connection[]      @relation("ConnectedToUser")
-  messages       Message[]         @relation("SentMessages")
-  receivedMsgs   Message[]         @relation("ReceivedMessages")
+  verification          Verification?
+  preferences           UserPreferences?
+  specializations       UserSpecialization[]
+  agreementAcceptances  ConfidentialityAgreementAcceptance[]
+  sessions              Session[]
+  journalEntries        JournalEntry[]
+  moodCheckins          MoodCheckin[]
+  posts                 Post[]
+  comments              Comment[]
+  connections           Connection[]      @relation("UserConnections")
+  connectedTo           Connection[]      @relation("ConnectedToUser")
+  messages              Message[]         @relation("SentMessages")
+  receivedMsgs          Message[]         @relation("ReceivedMessages")
 
   @@index([pseudonym])
   @@index([lastActiveAt])
+  @@index([courtType])
+  @@index([stateJurisdiction])
+  @@index([federalCircuit])
+  @@index([courtLevel])
 }
 
 model UserPreferences {
@@ -95,6 +213,13 @@ model UserPreferences {
   // Privacy preferences
   showYearsOnBench      Boolean @default(false)
   showCourtType         Boolean @default(false)
+
+  // NEW: Privacy controls for detailed fields
+  showJurisdiction      Boolean @default(false)
+  showCourtLevel        Boolean @default(false)
+  showJudgeType         Boolean @default(false)
+  showSpecializations   Boolean @default(false)
+
   allowDirectMessages   Boolean @default(false)
   allowConnectionReqs   Boolean @default(true)
 
@@ -183,6 +308,14 @@ model Space {
   color       String   // Hex color for UI
   icon        String?  // Icon identifier
 
+  // NEW: Space targeting and access control
+  spaceType                 String              @default("GENERAL") // GENERAL, SPECIALIZED
+  requireCourtType          String?
+  requireStateJurisdiction  USState?
+  requireFederalCircuit     FederalCircuit?
+  requireCourtLevel         CourtLevel?
+  requireJudgeType          JudgeType?
+
   // Moderation
   isActive    Boolean  @default(true)
 
@@ -193,6 +326,7 @@ model Space {
   posts       Post[]
 
   @@index([isActive])
+  @@index([spaceType])
 }
 
 model Post {
@@ -290,6 +424,54 @@ model JournalEntry {
 
   @@index([userId, createdAt])
   @@index([expiresAt])
+}
+
+// ============================================================================
+// JUDGE SEGMENTATION
+// ============================================================================
+
+model UserSpecialization {
+  id              String              @id @default(cuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization  CaseSpecialization
+  createdAt       DateTime            @default(now())
+
+  @@unique([userId, specialization])
+  @@index([userId])
+}
+
+// ============================================================================
+// CONFIDENTIALITY AGREEMENT
+// ============================================================================
+
+model ConfidentialityAgreement {
+  id          String                             @id @default(cuid())
+  version     String                             @unique
+  content     String                             // Full agreement text
+  summary     String                             // Brief summary
+  isActive    Boolean                            @default(true)
+  createdAt   DateTime                           @default(now())
+
+  acceptances ConfidentialityAgreementAcceptance[]
+
+  @@index([version])
+  @@index([isActive])
+}
+
+model ConfidentialityAgreementAcceptance {
+  id           String                   @id @default(cuid())
+  userId       String
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agreementId  String
+  agreement    ConfidentialityAgreement @relation(fields: [agreementId], references: [id])
+  acceptedAt   DateTime                 @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  @@unique([userId, agreementId])
+  @@index([userId])
+  @@index([agreementId])
 }
 
 // ============================================================================

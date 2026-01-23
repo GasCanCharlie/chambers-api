@@ -36,8 +36,37 @@ const registerSchema = z.object({
   pin: z.string().length(6).regex(/^\d+$/, {
     message: 'PIN must be 6 digits',
   }),
+
+  // REQUIRED: Basic info
+  courtType: z.enum(['FEDERAL', 'STATE', 'TRIBAL', 'ADMINISTRATIVE', 'MUNICIPAL']),
+
+  // REQUIRED: Jurisdiction (conditional based on courtType)
+  stateJurisdiction: z.enum([
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+  ]).optional(),
+  federalCircuit: z.enum([
+    'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH',
+    'SEVENTH', 'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'DC', 'FEDERAL'
+  ]).optional(),
+
+  // REQUIRED: Court details
+  courtLevel: z.enum(['TRIAL', 'APPELLATE', 'SUPREME', 'SPECIALIZED']),
+  judgeType: z.enum(['ELECTED', 'APPOINTED', 'MAGISTRATE', 'COMMISSIONER']),
+
+  // OPTIONAL: Profile info
   yearsOnBench: z.string().optional(),
-  courtType: z.enum(['FEDERAL', 'STATE', 'TRIBAL', 'ADMINISTRATIVE', 'MUNICIPAL']).optional(),
+  specializations: z.array(z.enum([
+    'TRAFFIC', 'MISDEMEANORS', 'FELONIES', 'SMALL_CLAIMS', 'REGULAR_CLAIMS',
+    'LARGE_CLAIMS', 'ENVIRONMENTAL', 'PROBATE', 'FAMILY', 'JUVENILE',
+    'CIVIL', 'CRIMINAL', 'BANKRUPTCY', 'TAX', 'PATENT', 'IMMIGRATION'
+  ])).optional(),
+
+  // REQUIRED: Confidentiality agreement
+  acceptedAgreementId: z.string(),
 });
 
 const loginSchema = z.object({
@@ -157,6 +186,36 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post('/register', async (request: FastifyRequest, reply: FastifyReply) => {
     const body = registerSchema.parse(request.body);
 
+    // Validate jurisdiction based on court type
+    if (body.courtType === 'FEDERAL' && !body.federalCircuit) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Validation Error',
+        message: 'Federal judges must specify their circuit',
+      });
+    }
+
+    if (body.courtType === 'STATE' && !body.stateJurisdiction) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Validation Error',
+        message: 'State judges must specify their state',
+      });
+    }
+
+    // Verify agreement is valid and active
+    const agreement = await prisma.confidentialityAgreement.findUnique({
+      where: { id: body.acceptedAgreementId, isActive: true },
+    });
+
+    if (!agreement) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Invalid Agreement',
+        message: 'Please accept the current confidentiality agreement',
+      });
+    }
+
     // Check verification
     const verification = await prisma.verification.findUnique({
       where: { id: body.verificationId },
@@ -220,6 +279,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
           pinHash,
           yearsOnBench: body.yearsOnBench,
           courtType: body.courtType,
+          stateJurisdiction: body.stateJurisdiction,
+          federalCircuit: body.federalCircuit,
+          courtLevel: body.courtLevel,
+          judgeType: body.judgeType,
         },
       });
 
@@ -228,9 +291,37 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         data: { userId: newUser.id },
       });
 
-      // Create default preferences
+      // Create specializations if provided
+      if (body.specializations && body.specializations.length > 0) {
+        await tx.userSpecialization.createMany({
+          data: body.specializations.map(spec => ({
+            userId: newUser.id,
+            specialization: spec,
+          })),
+        });
+      }
+
+      // Record agreement acceptance
+      await tx.confidentialityAgreementAcceptance.create({
+        data: {
+          userId: newUser.id,
+          agreementId: body.acceptedAgreementId,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+      });
+
+      // Create default preferences with all privacy fields hidden
       await tx.userPreferences.create({
-        data: { userId: newUser.id },
+        data: {
+          userId: newUser.id,
+          showYearsOnBench: false,
+          showCourtType: false,
+          showJurisdiction: false,
+          showCourtLevel: false,
+          showJudgeType: false,
+          showSpecializations: false,
+        },
       });
 
       return newUser;
@@ -245,6 +336,10 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         pseudonym: user.pseudonym,
         yearsOnBench: user.yearsOnBench,
         courtType: user.courtType,
+        stateJurisdiction: user.stateJurisdiction,
+        federalCircuit: user.federalCircuit,
+        courtLevel: user.courtLevel,
+        judgeType: user.judgeType,
       },
       accessToken,
       refreshToken,

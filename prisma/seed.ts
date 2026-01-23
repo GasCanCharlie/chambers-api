@@ -11,59 +11,247 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Seeding database...');
 
-  // Create discussion spaces
-  const spaces = [
+  // Create confidentiality agreement
+  console.log('Creating confidentiality agreement...');
+  await prisma.confidentialityAgreement.upsert({
+    where: { version: 'V1_0' },
+    update: {},
+    create: {
+      version: 'V1_0',
+      summary: 'Chambers Platform Confidentiality Agreement',
+      content: `CHAMBERS PLATFORM CONFIDENTIALITY AGREEMENT
+
+Last Updated: January 2026
+
+BY USING THE CHAMBERS PLATFORM, YOU AGREE TO THE FOLLOWING CONFIDENTIALITY TERMS:
+
+1. CONFIDENTIALITY OF DISCUSSIONS
+All discussions, posts, comments, and messages shared on Chambers are strictly confidential. Members agree to:
+- Keep all content shared on the platform private
+- Not screenshot, copy, or share discussions outside the platform
+- Not attempt to identify other members
+- Respect the anonymity of all participants
+
+2. NO CASE-SPECIFIC DETAILS
+Members must NOT share:
+- Case numbers, parties' names, or identifying case details
+- Information that could identify specific cases, litigants, or attorneys
+- Details that could compromise judicial independence or ethics
+- Confidential court proceedings or sealed information
+
+3. ANONYMITY AND PRIVACY
+- The platform operates on pseudonymous identities
+- Members are responsible for maintaining their own anonymity
+- Do not reveal personal identifying information about yourself or others
+- The platform cannot guarantee absolute anonymity
+
+4. REPORTING OBLIGATIONS
+Members agree to:
+- Report concerning content that violates these terms
+- Report any content suggesting harm to self or others
+- Report ethical violations or misconduct
+
+5. PLATFORM LIMITATIONS
+- Chambers is a peer support platform, not professional mental health care
+- The platform cannot guarantee complete privacy or security
+- Electronic communications always carry some security risk
+- Chambers is not a substitute for professional counseling
+
+6. BREACH OF CONFIDENTIALITY
+Violation of these confidentiality terms may result in:
+- Immediate removal from the platform
+- Reporting to appropriate authorities if required by law
+- Other consequences as determined by platform administrators
+
+7. DISCLAIMER
+While we strive to maintain confidentiality:
+- The platform cannot control how members use information
+- Technical breaches, though unlikely, are possible
+- Legal obligations may require disclosure in rare circumstances
+
+BY ACCEPTING THIS AGREEMENT, YOU ACKNOWLEDGE:
+- You have read and understood these terms
+- You agree to maintain confidentiality
+- You understand the risks and limitations
+- You will use the platform responsibly and ethically
+
+This agreement may be updated periodically. Continued use constitutes acceptance of updates.`,
+      isActive: true,
+    },
+  });
+
+  console.log('✅ Created confidentiality agreement');
+
+  // Create discussion spaces (GENERAL spaces accessible to all)
+  const generalSpaces = [
     {
       name: 'The Weight Room',
       description: 'Processing heavy cases and decisions',
       color: '#1E3A5F',
       icon: 'weight',
+      spaceType: 'GENERAL',
     },
     {
       name: 'Overwhelm & Workload',
       description: 'Caseload, time pressure, administrative burden',
       color: '#D4A574',
       icon: 'clock',
+      spaceType: 'GENERAL',
     },
     {
       name: 'Ethical Crossroads',
       description: 'Navigating gray areas and conscience',
       color: '#4A6741',
       icon: 'scale',
+      spaceType: 'GENERAL',
     },
     {
       name: 'Life Beyond the Bench',
       description: 'Family, identity, retirement transitions',
       color: '#7BA3A8',
       icon: 'home',
+      spaceType: 'GENERAL',
     },
     {
       name: 'New to the Robe',
       description: 'First 5 years on the bench',
       color: '#E8A87C',
       icon: 'star',
+      spaceType: 'GENERAL',
     },
     {
       name: 'Federal Perspectives',
       description: 'Federal judiciary-specific discussions',
       color: '#2A4A73',
       icon: 'building',
+      spaceType: 'GENERAL',
     },
     {
       name: 'State & Local Realities',
       description: 'State, county, and municipal court issues',
       color: '#5C7D52',
       icon: 'map',
+      spaceType: 'GENERAL',
     },
     {
       name: 'Mentorship Circle',
       description: 'Guidance from senior and retired judges',
       color: '#8B7E74',
       icon: 'users',
+      spaceType: 'GENERAL',
     },
   ];
 
-  for (const space of spaces) {
+  // Create specialized spaces (filtered by judge characteristics)
+  const specializedSpaces = [
+    // Federal Circuit Spaces
+    {
+      name: '1st Circuit Judges',
+      description: 'Federal judges in the First Circuit',
+      color: '#2A4A73',
+      icon: 'building',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'FEDERAL',
+      requireFederalCircuit: 'FIRST',
+    },
+    {
+      name: '9th Circuit Judges',
+      description: 'Federal judges in the Ninth Circuit',
+      color: '#2A4A73',
+      icon: 'building',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'FEDERAL',
+      requireFederalCircuit: 'NINTH',
+    },
+    {
+      name: 'DC Circuit Judges',
+      description: 'Federal judges in the DC Circuit',
+      color: '#2A4A73',
+      icon: 'building',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'FEDERAL',
+      requireFederalCircuit: 'DC',
+    },
+
+    // State-specific spaces (examples)
+    {
+      name: 'California Judges',
+      description: 'Judges serving in California courts',
+      color: '#5C7D52',
+      icon: 'map',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'STATE',
+      requireStateJurisdiction: 'CA',
+    },
+    {
+      name: 'New York Judges',
+      description: 'Judges serving in New York courts',
+      color: '#5C7D52',
+      icon: 'map',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'STATE',
+      requireStateJurisdiction: 'NY',
+    },
+    {
+      name: 'Texas Judges',
+      description: 'Judges serving in Texas courts',
+      color: '#5C7D52',
+      icon: 'map',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'STATE',
+      requireStateJurisdiction: 'TX',
+    },
+    {
+      name: 'Florida Judges',
+      description: 'Judges serving in Florida courts',
+      color: '#5C7D52',
+      icon: 'map',
+      spaceType: 'SPECIALIZED',
+      requireCourtType: 'STATE',
+      requireStateJurisdiction: 'FL',
+    },
+
+    // Court level spaces
+    {
+      name: 'Appellate Judges',
+      description: 'Appeals court judges across all jurisdictions',
+      color: '#7BA3A8',
+      icon: 'scale',
+      spaceType: 'SPECIALIZED',
+      requireCourtLevel: 'APPELLATE',
+    },
+    {
+      name: 'Trial Court Judges',
+      description: 'Trial court judges across all jurisdictions',
+      color: '#7BA3A8',
+      icon: 'gavel',
+      spaceType: 'SPECIALIZED',
+      requireCourtLevel: 'TRIAL',
+    },
+
+    // Judge type spaces
+    {
+      name: 'Elected Judges',
+      description: 'Judges who are elected to their positions',
+      color: '#8B7E74',
+      icon: 'users',
+      spaceType: 'SPECIALIZED',
+      requireJudgeType: 'ELECTED',
+    },
+    {
+      name: 'Appointed Judges',
+      description: 'Judges who are appointed to their positions',
+      color: '#8B7E74',
+      icon: 'users',
+      spaceType: 'SPECIALIZED',
+      requireJudgeType: 'APPOINTED',
+    },
+  ];
+
+  // Combine all spaces
+  const allSpaces = [...generalSpaces, ...specializedSpaces];
+
+  for (const space of allSpaces) {
     await prisma.space.upsert({
       where: { name: space.name },
       update: space,
@@ -71,7 +259,7 @@ async function main() {
     });
   }
 
-  console.log(`✅ Created ${spaces.length} discussion spaces`);
+  console.log(`✅ Created ${allSpaces.length} discussion spaces (${generalSpaces.length} general, ${specializedSpaces.length} specialized)`);
 
   // Create exercises (content is JSON stringified for SQLite)
   const exercises = [

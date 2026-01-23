@@ -18,6 +18,26 @@ const updateProfileSchema = z.object({
   pseudonym: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/).optional(),
   yearsOnBench: z.string().optional(),
   courtType: z.enum(['FEDERAL', 'STATE', 'TRIBAL', 'ADMINISTRATIVE', 'MUNICIPAL']).optional().nullable(),
+
+  // NEW: Detailed segmentation fields
+  stateJurisdiction: z.enum([
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
+  ]).optional().nullable(),
+  federalCircuit: z.enum([
+    'FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH',
+    'SEVENTH', 'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'DC', 'FEDERAL'
+  ]).optional().nullable(),
+  courtLevel: z.enum(['TRIAL', 'APPELLATE', 'SUPREME', 'SPECIALIZED']).optional().nullable(),
+  judgeType: z.enum(['ELECTED', 'APPOINTED', 'MAGISTRATE', 'COMMISSIONER']).optional().nullable(),
+  specializations: z.array(z.enum([
+    'TRAFFIC', 'MISDEMEANORS', 'FELONIES', 'SMALL_CLAIMS', 'REGULAR_CLAIMS',
+    'LARGE_CLAIMS', 'ENVIRONMENTAL', 'PROBATE', 'FAMILY', 'JUVENILE',
+    'CIVIL', 'CRIMINAL', 'BANKRUPTCY', 'TAX', 'PATENT', 'IMMIGRATION'
+  ])).optional(),
 });
 
 const updatePreferencesSchema = z.object({
@@ -29,6 +49,11 @@ const updatePreferencesSchema = z.object({
   // Privacy
   showYearsOnBench: z.boolean().optional(),
   showCourtType: z.boolean().optional(),
+  // NEW: Privacy controls for detailed fields
+  showJurisdiction: z.boolean().optional(),
+  showCourtLevel: z.boolean().optional(),
+  showJudgeType: z.boolean().optional(),
+  showSpecializations: z.boolean().optional(),
   allowDirectMessages: z.boolean().optional(),
   allowConnectionReqs: z.boolean().optional(),
   // App
@@ -62,6 +87,7 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       where: { id: request.userId! },
       include: {
         preferences: true,
+        specializations: true,
         _count: {
           select: {
             journalEntries: true,
@@ -81,9 +107,14 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       pseudonym: user.pseudonym,
       yearsOnBench: user.yearsOnBench,
       courtType: user.courtType,
+      stateJurisdiction: user.stateJurisdiction,
+      federalCircuit: user.federalCircuit,
+      courtLevel: user.courtLevel,
+      judgeType: user.judgeType,
       isGuide: user.isGuide,
       createdAt: user.createdAt,
       preferences: user.preferences,
+      specializations: user.specializations,
       stats: {
         journalEntries: user._count.journalEntries,
         moodCheckins: user._count.moodCheckins,
@@ -114,13 +145,45 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
-    const user = await prisma.user.update({
-      where: { id: request.userId! },
-      data: {
-        pseudonym: body.pseudonym,
-        yearsOnBench: body.yearsOnBench,
-        courtType: body.courtType,
-      },
+    // Use transaction to update user and specializations
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: request.userId! },
+        data: {
+          pseudonym: body.pseudonym,
+          yearsOnBench: body.yearsOnBench,
+          courtType: body.courtType,
+          stateJurisdiction: body.stateJurisdiction,
+          federalCircuit: body.federalCircuit,
+          courtLevel: body.courtLevel,
+          judgeType: body.judgeType,
+        },
+      });
+
+      // Update specializations if provided
+      if (body.specializations !== undefined) {
+        // Delete existing specializations
+        await tx.userSpecialization.deleteMany({
+          where: { userId: request.userId! },
+        });
+
+        // Create new specializations
+        if (body.specializations.length > 0) {
+          await tx.userSpecialization.createMany({
+            data: body.specializations.map(spec => ({
+              userId: request.userId!,
+              specialization: spec,
+            })),
+          });
+        }
+      }
+
+      // Fetch updated specializations
+      const specializations = await tx.userSpecialization.findMany({
+        where: { userId: request.userId! },
+      });
+
+      return { user, specializations };
     });
 
     await prisma.auditLog.create({
@@ -131,10 +194,15 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return {
-      id: user.id,
-      pseudonym: user.pseudonym,
-      yearsOnBench: user.yearsOnBench,
-      courtType: user.courtType,
+      id: result.user.id,
+      pseudonym: result.user.pseudonym,
+      yearsOnBench: result.user.yearsOnBench,
+      courtType: result.user.courtType,
+      stateJurisdiction: result.user.stateJurisdiction,
+      federalCircuit: result.user.federalCircuit,
+      courtLevel: result.user.courtLevel,
+      judgeType: result.user.judgeType,
+      specializations: result.specializations,
     };
   });
 
